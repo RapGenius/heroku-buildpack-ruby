@@ -84,8 +84,6 @@ def install_gem(gem_name, version)
   name = "#{gem_name}-#{version}"
   Dir.mktmpdir("#{gem_name}-#{version}") do |tmpdir|
     Dir.chdir(tmpdir) do |dir|
-      FileUtils.rm_rf("#{tmpdir}/*")
-
       in_gem_env(tmpdir) do
         sh("unset RUBYOPT; gem install #{gem_name} --version #{version} --no-ri --no-rdoc --env-shebang")
         sh("rm #{gem_name}-#{version}.gem")
