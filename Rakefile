@@ -1,6 +1,5 @@
 require "fileutils"
 require "tmpdir"
-require 'hatchet/tasks'
 
 S3_BUCKET_NAME  = "heroku-buildpack-ruby"
 VENDOR_URL      = "https://s3.amazonaws.com/#{S3_BUCKET_NAME}"
@@ -37,6 +36,50 @@ def in_gem_env(gem_home, &block)
 
   ENV['GEM_HOME'] = old_gem_home
   ENV['GEM_PATH'] = old_gem_path
+end
+
+desc "install ree"
+task "ree:install", :version do |t, args|
+  full_version   = args[:version] || '1.8.7-2012.02'
+  full_name      = "ruby-enterprise-#{full_version}"
+  version        = '1.8.7'
+  major_ruby     = '1.8'
+  rubygems       = '1.8.24'
+  name           = "ruby-#{version}"
+  usr_dir        = "usr"
+  rubygems_dir   = "#{full_name}/rubygems"
+  Dir.mktmpdir("ruby-") do |tmpdir|
+    Dir.chdir(tmpdir) do |dir|
+      FileUtils.rm_rf("#{tmpdir}/*")
+
+      sh "curl https://rubyenterpriseedition.googlecode.com/files/#{full_name}.tar.gz -s -o - | tar zxf -"
+
+      Dir.chdir("#{full_name}/source") do |source_dir|
+        sh "curl -o 34ba44f94a62c63ddf02a045b6f4edcd6eab4989.patch https://github.com/Genius/rubyenterpriseedition187-330/commit/34ba44f94a62c63ddf02a045b6f4edcd6eab4989.patch"
+        sh "curl -o 5384967a015be227e16af7a332a50d45e14ed0ad.patch https://github.com/Genius/rubyenterpriseedition187-330/commit/5384967a015be227e16af7a332a50d45e14ed0ad.patch"
+        sh "curl -o tcmalloc_declare_memalign_volatile.patch https://raw.githubusercontent.com/skottler/rubyenterpriseedition187-330/tcmalloc-patch/patches/tcmalloc_declare_memalign_volatile.patch"
+        sh "patch -p1 < 34ba44f94a62c63ddf02a045b6f4edcd6eab4989.patch"
+        sh "patch -p1 < 5384967a015be227e16af7a332a50d45e14ed0ad.patch"
+        sh "patch -p1 < tcmalloc_declare_memalign_volatile.patch"
+      end
+
+      # build ruby
+      if major_ruby == "1.8"
+        output  = "ruby-build-#{version}"
+        prefix  = "/tmp/ruby-#{version}"
+          build_command = [
+            "mv #{full_name} #{prefix}",
+            "cd #{prefix}",
+            "./installer --auto /app/vendors/#{output} --no-dev-docs --no-tcmalloc",
+          ]
+          build_command = build_command.join(" && ")
+
+          sh build_command
+
+          sh "/app/vendors/#{output}/bin/ruby -v"
+      end
+    end
+  end
 end
 
 def install_gem(gem_name, version)
