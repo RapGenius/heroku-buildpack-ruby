@@ -75,8 +75,6 @@ task "ree:install", :version do |t, args|
           build_command = build_command.join(" && ")
 
           sh build_command
-
-          sh "/app/vendors/#{output}/bin/ruby -v"
       end
     end
   end
