@@ -28,7 +28,13 @@ class LanguagePack::Ruby < LanguagePack::Base
   end
 
   def self.bundler
-    @@bundler ||= LanguagePack::Helpers::BundlerWrapper.new.install
+    @@bundler ||= begin
+      original_gemfile_path = env('BUNDLE_GEMFILE') || './Gemfile'
+      expanded_gemfile_path = Pathname.new(original_gemfile_path).expand_path.to_s
+      ENV['BUNDLE_GEMFILE'] = user_env_hash['BUNDLE_GEMFILE'] = expanded_gemfile_path
+      puts "-----> LanguagePack::Ruby.bundler: Expanding BUNDLE_GEMFILE (#{original_gemfile_path}) to #{expanded_gemfile_path}"
+      LanguagePack::Helpers::BundlerWrapper.new(gemfile_path: expanded_gemfile_path).install
+    end
   end
 
   def bundler
@@ -633,7 +639,12 @@ BUNDLE
       log("bundle") do
         bundle_without = env("BUNDLE_WITHOUT") || default_bundle_without
         bundle_bin     = "bundle"
-        bundle_command = "#{bundle_bin} install --without #{bundle_without} --path vendor/bundle --binstubs #{bundler_binstubs_path}"
+        relative_gemfile = env("BUNDLE_GEMFILE").sub("#{Dir.pwd}/", "")
+        puts "----> pwd: #{Dir.pwd}"
+        puts "----> relative gemfile: #{relative_gemfile}"
+        relative_path  = ['..' * (relative_gemfile.split('/').length - 1), "vendor/bundle"].reject(&:empty?).join('/')
+        puts "----> relative path: #{relative_path}"
+        bundle_command = "#{bundle_bin} install --without #{bundle_without} --path #{relative_path} --binstubs #{bundler_binstubs_path}"
         bundle_command << " -j4"
 
         if File.exist?("#{Dir.pwd}/.bundle/config")
@@ -680,7 +691,7 @@ WARNING
           # we need to set BUNDLE_CONFIG and BUNDLE_GEMFILE for
           # codon since it uses bundler.
           env_vars       = {
-            "BUNDLE_GEMFILE"                => "#{pwd}/Gemfile",
+            "BUNDLE_GEMFILE"                => env('BUNDLE_GEMFILE') || "#{pwd}/Gemfile",
             "BUNDLE_CONFIG"                 => "#{pwd}/.bundle/config",
             "CPATH"                         => noshellescape("#{yaml_include}:$CPATH"),
             "CPPATH"                        => noshellescape("#{yaml_include}:$CPPATH"),
@@ -854,6 +865,7 @@ params = CGI.parse(uri.query || "")
       raise_on_fail      = bundler.gem_version('railties') && bundler.gem_version('railties') > Gem::Version.new('3.x')
 
       topic "Detecting rake tasks"
+      puts "-----> LanguagePack::Ruby#rake: BUNDLE_GEMFILE is (#{rake_env['BUNDLE_GEMFILE'].inspect})"
       rake = LanguagePack::Helpers::RakeRunner.new(rake_gem_available)
       rake.load_rake_tasks!({ env: rake_env }, raise_on_fail)
       rake
